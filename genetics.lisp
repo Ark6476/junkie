@@ -20,15 +20,15 @@
 (defparameter *word-length* 4 "size of one instruction")
 (defparameter *chromosome-length* 7 "size of one chromosome (number of words)")
 
-(defparameter *population-size* 10 "size of any generation")
+(defparameter *population-size* 40 "size of any generation")
 
 (defparameter *current-generation* nil "List of current chromosomes")
 (defparameter *current-generation-number* 0 "Counter to see how many generations it takes to find the answer")
 
-(defparameter *crossover-rate* (/ 7 10)
+(defparameter *crossover-rate* 1
   "The chance that two chromosomes will swap their bits")
 
-(defparameter *mutation-rate* (/ 1 1000)
+(defparameter *mutation-rate* (/ 1 100)
   "The chance that a bit within a chromosome will be flipped")
 
 (defparameter *target-number* 42 "The number we're trying to find")
@@ -49,7 +49,15 @@
                (append decoded-chromosome (list (decode-word (get-word chromosome index))))))
     decoded-chromosome))
 
-;TODO: Handle divide by zero bug
+(defun legal-operation-p (operation-list new-element)
+  "Make sure it's legal to add new-element to operation-list"
+  (or (not (numberp new-element))
+       (handler-case
+           (progn
+             (eval-decoded-chromosome (append operation-list (list new-element)))
+             T)
+         (division-by-zero nil))))
+
 (defun decode-chromosome (chromosome)
   "Returns a valid list in the form of (number (operator number)*)"
   (let ((decoded-chromosome) (need-number T))
@@ -57,9 +65,11 @@
        do
          (when (and (not (null decoded-word))
                     (or (and need-number (numberp decoded-word))
-                        (and (not need-number) (not (numberp decoded-word)))))
+                        (and (not need-number) (not (numberp decoded-word))))
+                    (legal-operation-p decoded-chromosome decoded-word))
            (setf decoded-chromosome (append decoded-chromosome (list decoded-word)))
            (setf need-number (not need-number))))
+    (when (null decoded-chromosome) (setf decoded-chromosome '(0 + 0)))
     (when (not (numberp (first (last decoded-chromosome)))) ;Trim off trailing operators
       (setf decoded-chromosome (subseq decoded-chromosome 0 (- (length decoded-chromosome) 1))))
     decoded-chromosome))
@@ -144,9 +154,9 @@
 (defun get-next-generation (generation)
   (let ((next-generation nil) (generation (sort-chromosomes generation)))
     (dotimes (i (length generation))
-      (setf next-generation (append next-generation (list (breed
-                                                           (select-chromosome-for-breeding generation)
-                                                           (select-chromosome-for-breeding generation))))))
+      (let* ((chromosome1 (select-chromosome-for-breeding generation))
+             (chromosome2 (select-chromosome-for-breeding (remove chromosome1 generation :count 1))))
+        (setf next-generation (append next-generation (list (breed chromosome1 chromosome2))))))
     next-generation))
       
 (defun sort-chromosomes (generation)
@@ -162,8 +172,26 @@
          (when (> sum random-fitness-score)
            (return chromosome)))))
 
-
 ;;;;;;;;;;;;;
 
-(defparameter MYCHROMO (make-random-chromosome))
-(defparameter MYPOP (make-initial-population))
+(defun is-winner (chromosome)
+  (handler-case
+      (progn
+        (fitness-score chromosome)
+        nil)
+    (division-by-zero (e) T)))
+
+(defun find-target-number (&optional
+                             (target-number *target-number*)
+                             (population (make-initial-population))
+                             (generation-number 1))
+  (let ((winners (remove-if-not #'is-winner population)))
+    (when (= (mod generation-number 100) 0)
+      (format T "Generaton ~a: ~A~%~%" generation-number (mapcar #'eval-chromosome population)))
+    (if winners
+        (values winners generation-number)
+        (find-target-number target-number (get-next-generation population) (1+ generation-number)))))
+
+(defun main ()
+  (multiple-value-bind (winners generaton-number) (find-target-number)
+    (format T "Found winner(s) ~A in ~A generations" winners generaton-number)))

@@ -21,12 +21,3 @@
        )
     ))
 
-
-
-(defmacro make-prefix-chromosome (decoded-chromosome)
-  "Returns a decoded chromosome in prefix form"
-  (let ((num-words (length decoded-chromosome)))
-    `'(,(second decoded-chromosome)
-       ,(first decoded-chromosome)
-       ,(third decoded-chromosome)))
-  )
